@@ -1,169 +1,394 @@
-# **Traffic Sign Recognition** 
-
-## Writeup
-
-### You can use this file as a template for your writeup if you want to submit it as a markdown file, but feel free to use some other method and submit a pdf if you prefer.
-
----
-
-**Build a Traffic Sign Recognition Project**
-
-The goals / steps of this project are the following:
-* Load the data set (see below for links to the project data set)
-* Explore, summarize and visualize the data set
-* Design, train and test a model architecture
-* Use the model to make predictions on new images
-* Analyze the softmax probabilities of the new images
-* Summarize the results with a written report
 
 
-[//]: # (Image References)
+# 交通标志检测 
 
-[image1]: ./examples/visualization.jpg "Visualization"
-[image2]: ./examples/grayscale.jpg "Grayscaling"
-[image3]: ./examples/random_noise.jpg "Random Noise"
-[image4]: ./examples/placeholder.png "Traffic Sign 1"
-[image5]: ./examples/placeholder.png "Traffic Sign 2"
-[image6]: ./examples/placeholder.png "Traffic Sign 3"
-[image7]: ./examples/placeholder.png "Traffic Sign 4"
-[image8]: ./examples/placeholder.png "Traffic Sign 5"
+总共执行的操作如下
+* 加载数据，包括训练集，验证集，测试集，[下载地址](https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/traffic-signs-data.zip)
 
-## Rubric Points
-### Here I will consider the [rubric points](https://review.udacity.com/#!/rubrics/481/view) individually and describe how I addressed each point in my implementation.  
+  ```python
+  # Load pickled data
+  import pickle
 
----
-### Writeup / README
+  # Fill this in based on where you saved the training and testing data
+  training_file = 'traffic-signs-data/train.p'
+  validation_file = 'traffic-signs-data/valid.p'
+  testing_file = 'traffic-signs-data/test.p'
 
-#### 1. Provide a Writeup / README that includes all the rubric points and how you addressed each one. You can submit your writeup as markdown or pdf. You can use this template as a guide for writing the report. The submission includes the project code.
+  with open(training_file, mode='rb') as f:
+      train = pickle.load(f)
+  with open(validation_file, mode='rb') as f:
+      valid = pickle.load(f)
+  with open(testing_file, mode='rb') as f:
+      test = pickle.load(f)
 
-You're reading it! and here is a link to my [project code](https://github.com/udacity/CarND-Traffic-Sign-Classifier-Project/blob/master/Traffic_Sign_Classifier.ipynb)
+  X_train, y_train = train['features'], train['labels']
+  X_valid, y_valid = valid['features'], valid['labels']
+  X_test, y_test = test['features'], test['labels']
+  ```
 
-### Data Set Summary & Exploration
+  > 由下观察出一共有43个分类，且训练数据只有三万多个，数据量很小，所以后面考虑增加数据。
+  >
+  > 增加数据有两种方式，一是采集数据（困难），二是使用图片处理生成（简单），我选择的后者。
 
-#### 1. Provide a basic summary of the data set. In the code, the analysis should be done using python, numpy and/or pandas methods rather than hardcoding results manually.
+  ![1](/Users/xiaoqiangxie/Desktop/imgs/1.jpg)
 
-I used the pandas library to calculate summary statistics of the traffic
-signs data set:
+* 查看显示数据
 
-* The size of training set is ?
-* The size of the validation set is ?
-* The size of test set is ?
-* The shape of a traffic sign image is ?
-* The number of unique classes/labels in the data set is ?
+  > 随机获取几张图片
 
-#### 2. Include an exploratory visualization of the dataset.
+  ```python
+  # plotting traffic sign images
+  fig, axes = plt.subplots(2, 5, figsize=(18, 5))
+  ax_array = axes.ravel()
+  for ax in ax_array:
+      index = random.randint(0, len(X_test))
+      ax.imshow(X_test[index])
+      ax.axis("off")
+      ax.set_title(id_to_name[y_test[index]])
+  plt.show()
+  ```
 
-Here is an exploratory visualization of the data set. It is a bar chart showing how the data ...
+  ![2](/Users/xiaoqiangxie/Desktop/imgs/2.jpg)
 
-![alt text][image1]
+  > 使用直方图，查看图像的各个类别的分布情况
 
-### Design and Test a Model Architecture
+  ```python
+  # calculate the frequency of each category sign
+  def plot_y_train_hist():
+      fig = plt.figure(figsize=(15, 5))
+      ax = fig.add_subplot(1, 1, 1)
+      hist=ax.hist(y_train, bins = n_classes)
+      ax.set_title("the frequency of each category sign")
+      ax.set_xlabel("signs")
+      ax.set_ylabel("frequency")
+      plt.show()
+      return hist
+  hist = plot_y_train_hist()
+  ```
 
-#### 1. Describe how you preprocessed the image data. What techniques were chosen and why did you choose these techniques? Consider including images showing the output of each preprocessing technique. Pre-processing refers to techniques such as converting to grayscale, normalization, etc. (OPTIONAL: As described in the "Stand Out Suggestions" part of the rubric, if you generated additional data for training, describe why you decided to generate additional data, how you generated the data, and provide example images of the additional data. Then describe the characteristics of the augmented training set like number of images in the set, number of images for each class, etc.)
+  ![3](/Users/xiaoqiangxie/Desktop/imgs/3.jpg)
 
-As a first step, I decided to convert the images to grayscale because ...
+* 由上图知道数据分配不均匀，所以需要数据重采样，使样本个数分配均匀
 
-Here is an example of a traffic sign image before and after grayscaling.
+  > 这里只是对相同的数据简单的复制，是样本数量小于1000的补齐到1000个。
 
-![alt text][image2]
+  ```python
+  # Generating bin centers
+  bin_edges = hist[1]
+  bin_centers = (bin_edges[1:]  + bin_edges[0:len(bin_edges)-1])/2
+  for i in range(len(bin_centers)):
+      if hist[0][i] < 1000 :
+          train_data = [X_train[j] for j in range(len(y_train)) if y_train[j] == i]
+          need_resample_num = int(1000 - hist[0][i])
+          new_data_x = [np.copy(train_data[np.random.randint(len(train_data))]) for k in range(need_resample_num)]
+          new_data_y = [i for x in range(need_resample_num)]
+          X_train = np.vstack((X_train, np.array(new_data_x)))
+          y_train = np.hstack((y_train, np.array(new_data_y)))
+  print(X_train.shape)
+  print(y_train.shape)
+  plot_y_train_hist()
+  ```
 
-As a last step, I normalized the image data because ...
+  ![4](/Users/xiaoqiangxie/Desktop/imgs/4.jpg)
 
-I decided to generate additional data because ... 
+* 数据预处理
 
-To add more data to the the data set, I used the following techniques because ... 
+  > 输入的图像是RGB图像，对数据进行颜色空间转换，SCALE，归一化，直方图均衡化。
+  >
+  > 尝试过转换成其他的颜色空间，只有在转换为YUV颜色空间取Y通道的时候效果最好。
 
-Here is an example of an original image and an augmented image:
+  ```python
+  import cv2
 
-![alt text][image3]
+  def preprocess_features(X, equalize_hist=True):
+      normalized_X = []
+      for i in range(len(X)):
+          # Convert from RGB to YUV
+          yuv_img = cv2.cvtColor(X[i], cv2.COLOR_RGB2YUV)
+          yuv_img_v = X[i][:, :, 0]
+          # equalizeHist
+          yuv_img_v = cv2.equalizeHist(yuv_img_v)
+          # expand_dis
+          yuv_img_v = np.expand_dims(yuv_img_v, 2)
+          normalized_X.append(yuv_img_v)
+      # normalize
+      normalized_X = np.array(normalized_X, dtype=np.float32)
+      normalized_X = (normalized_X-128)/128
+      # normalized_X /= (np.std(normalized_X, axis=0) + np.finfo('float32').eps)
+      return normalized_X
 
-The difference between the original data set and the augmented data set is the following ... 
+  X_train_normmalized = preprocess_features(X_train)
+  X_valid_normalized = preprocess_features(X_valid)
+  X_test_normalized = preprocess_features(X_test)
+  ```
 
+* 使数据和顺序无关，shuffle
 
-#### 2. Describe what your final model architecture looks like including model type, layers, layer sizes, connectivity, etc.) Consider including a diagram and/or table describing the final model.
+  ```python
+  from sklearn.utils import shuffle
 
-My final model consisted of the following layers:
+  X_train_normmalized, y_train = shuffle(X_train_normmalized, y_train)
+  ```
 
-| Layer         		|     Description	        					| 
-|:---------------------:|:---------------------------------------------:| 
-| Input         		| 32x32x3 RGB image   							| 
-| Convolution 3x3     	| 1x1 stride, same padding, outputs 32x32x64 	|
-| RELU					|												|
-| Max pooling	      	| 2x2 stride,  outputs 16x16x64 				|
-| Convolution 3x3	    | etc.      									|
-| Fully connected		| etc.        									|
-| Softmax				| etc.        									|
-|						|												|
-|						|												|
- 
+* 由于数据量不够，使用keras生成数据
 
+  > 可以使用tensorflow或cv2的图像翻转，亮度调整和比例的缩放等对图像进行变化，以增加数据。
+  >
+  > 但是keras默认封装了这些功能，用起来更方便。
 
-#### 3. Describe how you trained your model. The discussion can include the type of optimizer, the batch size, number of epochs and any hyperparameters such as learning rate.
+  ```python
+  from keras.preprocessing.image import ImageDataGenerator
 
-To train the model, I used an ....
+  # ImageDataGenerator
+  image_datagen = ImageDataGenerator(rotation_range = 10.,
+                                     zoom_range = 0.2,
+                                     width_shift_range =  0.08,
+                                     height_shift_range = 0.08
+                                    )
 
-#### 4. Describe the approach taken for finding a solution and getting the validation set accuracy to be at least 0.93. Include in the discussion the results on the training, validation and test sets and where in the code these were calculated. Your approach may have been an iterative process, in which case, outline the steps you took to get to the final solution and why you chose those steps. Perhaps your solution involved an already well known implementation or architecture. In this case, discuss why you think the architecture is suitable for the current problem.
+  # take a random image from the training set
+  index = np.random.randint(0, len(X_train_normmalized))
+  img = X_train_normmalized[index]
 
-My final model results were:
-* training set accuracy of ?
-* validation set accuracy of ? 
-* test set accuracy of ?
+  # plot the original image
+  plt.figure(figsize=(1, 1))
+  plt.imshow(np.squeeze(img), cmap="gray")
+  plt.title('Example of GRAY image (name = {})'.format(id_to_name[y_train[index]]))
+  plt.axis('off')
+  plt.show()
 
-If an iterative approach was chosen:
-* What was the first architecture that was tried and why was it chosen?
-* What were some problems with the initial architecture?
-* How was the architecture adjusted and why was it adjusted? Typical adjustments could include choosing a different model architecture, adding or taking away layers (pooling, dropout, convolution, etc), using an activation function or changing the activation function. One common justification for adjusting an architecture would be due to overfitting or underfitting. A high accuracy on the training set but low accuracy on the validation set indicates over fitting; a low accuracy on both sets indicates under fitting.
-* Which parameters were tuned? How were they adjusted and why?
-* What are some of the important design choices and why were they chosen? For example, why might a convolution layer work well with this problem? How might a dropout layer help with creating a successful model?
-
-If a well known architecture was chosen:
-* What architecture was chosen?
-* Why did you believe it would be relevant to the traffic sign application?
-* How does the final model's accuracy on the training, validation and test set provide evidence that the model is working well?
- 
-
-### Test a Model on New Images
-
-#### 1. Choose five German traffic signs found on the web and provide them in the report. For each image, discuss what quality or qualities might be difficult to classify.
-
-Here are five German traffic signs that I found on the web:
-
-![alt text][image4] ![alt text][image5] ![alt text][image6] 
-![alt text][image7] ![alt text][image8]
-
-The first image might be difficult to classify because ...
-
-#### 2. Discuss the model's predictions on these new traffic signs and compare the results to predicting on the test set. At a minimum, discuss what the predictions were, the accuracy on these new predictions, and compare the accuracy to the accuracy on the test set (OPTIONAL: Discuss the results in more detail as described in the "Stand Out Suggestions" part of the rubric).
-
-Here are the results of the prediction:
-
-| Image			        |     Prediction	        					| 
-|:---------------------:|:---------------------------------------------:| 
-| Stop Sign      		| Stop sign   									| 
-| U-turn     			| U-turn 										|
-| Yield					| Yield											|
-| 100 km/h	      		| Bumpy Road					 				|
-| Slippery Road			| Slippery Road      							|
-
-
-The model was able to correctly guess 4 of the 5 traffic signs, which gives an accuracy of 80%. This compares favorably to the accuracy on the test set of ...
-
-#### 3. Describe how certain the model is when predicting on each of the five new images by looking at the softmax probabilities for each prediction. Provide the top 5 softmax probabilities for each image along with the sign type of each probability. (OPTIONAL: as described in the "Stand Out Suggestions" part of the rubric, visualizations can also be provided such as bar charts)
-
-The code for making predictions on my final model is located in the 11th cell of the Ipython notebook.
-
-For the first image, the model is relatively sure that this is a stop sign (probability of 0.6), and the image does contain a stop sign. The top five soft max probabilities were
-
-| Probability         	|     Prediction	        					| 
-|:---------------------:|:---------------------------------------------:| 
-| .60         			| Stop sign   									| 
-| .20     				| U-turn 										|
-| .05					| Yield											|
-| .04	      			| Bumpy Road					 				|
-| .01				    | Slippery Road      							|
+  # plot some randomly augmented images
+  fig, ax_array = plt.subplots(3, 10, figsize=(15, 5))
+  for ax in ax_array.ravel():
+      images = np.expand_dims(img, 0)
+      # np.expand_dims(img, 0) means add dim
+      augmented_img, _ = image_datagen.flow(np.expand_dims(img, 0), np.expand_dims(y_train[index], 0)).next()
+      #augmented_img=preprocess_features(augmented_img)
+      ax.imshow(augmented_img.squeeze(), cmap="gray")
+      ax.axis('off')
+  plt.suptitle('Random examples of data augment (starting from the previous image)')
+  plt.show()
+  ```
 
 
-For the second image ... 
+  > 从生成的结果可以看出，生成的效果还是很不错 ，对原图像惊醒了一下放大、缩小、旋转，但是整个图像的形状进行了保留。
+
+![5](/Users/xiaoqiangxie/Desktop/imgs/5.jpg)
+
+* 构建神经网络架构，训练，验证，保存模型参数
+
+  > 构建的神经网络结构如下：
+
+  | 层         | 描述                          |
+  | ---------- | ----------------------------- |
+  | 输入层     | 32x32x1 GRAY image            |
+  | 卷积层 5x5 | 1x1 stride, outputs 32x32x32  |
+  | 激活函数   | relu                          |
+  | 池化层     | 2x2 stride,  outputs 16x16x32 |
+  | 卷积层 5x5 | 1x1 stride, outputs 16x16x32  |
+  | 激活函数   | relu                          |
+  | 池化层     | 2x2 stride,  outputs 8x8x32   |
+  | 全连接层   | input 2048, output 256        |
+  | 全连接层   | input256, output 128          |
+  | 全连接层   | input256, output 43           |
+  | 激活函数   | softmax                       |
+
+  ```python
+  from tensorflow.contrib.layers import flatten
+  import tensorflow as tf
+
+  EPOCHS = 35
+  BATCHES_PER_EPOCH = 500
+  BATCH_SIZE = 256
+  rate = 0.001
+
+  def MyNet(x, keep_prob):
+      # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
+      mu = 0
+      sigma = 0.1
+      
+      # Layer 1: Input = 32x32x1. Output = 16x16x32
+      conv1_W = tf.Variable(tf.truncated_normal(shape=(5, 5, 1, 32), mean = mu, stddev = sigma))
+      conv1_b = tf.Variable(tf.zeros(32))
+      conv1   = tf.nn.conv2d(x, conv1_W, strides=[1, 1, 1, 1], padding='SAME') + conv1_b
+      conv1   = tf.nn.dropout(conv1, keep_prob)
+      # Activation.
+      conv1   = tf.nn.relu(conv1)
+      # max pool
+      conv1   = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+
+      # Layer 2: Convolutional. Input = 16x16x32; Output = 8x8x64.
+      conv2_W = tf.Variable(tf.truncated_normal(shape=(5, 5, 32, 32), mean = mu, stddev = sigma))
+      conv2_b = tf.Variable(tf.zeros(32))
+      conv2   = tf.nn.conv2d(conv1, conv2_W, strides=[1, 1, 1, 1], padding='SAME') + conv2_b
+      conv2    = tf.nn.dropout(conv2, keep_prob)
+      # Activation.
+      conv2 = tf.nn.relu(conv2)
+      conv2 = tf.nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+      conv2 = tf.nn.dropout(conv2, keep_prob)
+      # Flatten. Input = 8x8x64. Output = 4096.
+      fc0   = flatten(conv2)
+      
+      # Layer 3: Fully Connected. Input = 4096. Output = 512.
+      fc1_W = tf.Variable(tf.truncated_normal(shape=(2048, 256), mean = mu, stddev = sigma))
+      fc1_b = tf.Variable(tf.zeros(256))
+      fc1   = tf.matmul(fc0, fc1_W) + fc1_b
+      fc1   = tf.nn.dropout(fc1, keep_prob)
+      # SOLUTION: Activation.
+      fc1    = tf.nn.relu(fc1)
+
+      # Fully Connected. Input = 512. Output = 128.
+      fc2_W  = tf.Variable(tf.truncated_normal(shape=(256, 128), mean = mu, stddev = sigma))
+      fc2_b  = tf.Variable(tf.zeros(128))
+      fc2    = tf.matmul(fc1, fc2_W) + fc2_b
+      fc2    = tf.nn.dropout(fc2, keep_prob)
+      # Activation.
+      fc2    = tf.nn.relu(fc2)
+
+      # Fully Connected. Input = 128. Output = 43.
+      fc3_W  = tf.Variable(tf.truncated_normal(shape=(128, 43), mean = mu, stddev = sigma))
+      fc3_b  = tf.Variable(tf.zeros(43))
+      logits = tf.matmul(fc2, fc3_W) + fc3_b
+      
+      return logits
+  ```
+
+  ```python
+  x = tf.placeholder(tf.float32, (None, 32, 32, 1))
+  y = tf.placeholder(tf.int32, (None))
+  one_hot_y = tf.one_hot(y, 43)
+  keep_prob = tf.placeholder(tf.float32)
+
+  logits = MyNet(x, keep_prob)
+  cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=one_hot_y, logits=logits)
+  loss_operation = tf.reduce_mean(cross_entropy)
+  optimizer = tf.train.AdamOptimizer(learning_rate = rate)
+  training_operation = optimizer.minimize(loss_operation)
+
+  correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
+  accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+  saver = tf.train.Saver()
+
+  def evaluate(X_data, y_data):
+      num_examples = len(X_data)
+      total_accuracy = 0
+      sess = tf.get_default_session()
+      for offset in range(0, num_examples, BATCH_SIZE):
+          batch_x, batch_y = X_data[offset:offset+BATCH_SIZE], y_data[offset:offset+BATCH_SIZE]
+          accuracy = sess.run(accuracy_operation, feed_dict={x:batch_x, y:batch_y, keep_prob:1.0})
+          total_accuracy += (accuracy * len(batch_x))
+      return total_accuracy / num_examples
+  ```
+
+  > 训练数据，一共进行了35个EPOCH，训练集的准确度达到了99.5%，测试集的准确度达到了95.7%。
+  >
+  > 对于学习率的选择，之前使用0.1，0.01效果都很差，学完准确率只有零点零几，当设置为0.001的时候效果明显上升了。BATCH_SIZE我设置的为32。并且使用了dropout，设为0.9。
+
+  ```python
+  # train the model 
+  with tf.Session() as sess:
+      sess.run(tf.global_variables_initializer())
+      print("Training...")
+      for i in range(EPOCHS):
+          batches = 0
+          for batch_x,batch_y in image_datagen.flow(np.array(X_train_normmalized), np.array(y_train)):
+              if batches < BATCHES_PER_EPOCH:
+                  sess.run(training_operation, feed_dict={x:batch_x, y:batch_y, keep_prob:0.9})
+                  batches = batches + 1
+              else:
+                  break
+          validation_accuracy = evaluate(X_valid_normalized, y_valid)
+          train_accuracy = evaluate(X_train_normmalized, y_train)
+          print("EPOCH {} ...".format(i+1))
+          print("Validation Accuracy = {:.3f},Train Accuracy = {:.3f}".format(validation_accuracy, train_accuracy))
+
+      saver.save(sess, './checkpoints/traffic_sign_classifier.ckpt')
+      print("Model saved")
+  ```
+
+* 恢复模型参数，测试
+
+  > 对测试集的预测结果是百分之93.3，不是很高
+
+  ```python
+  # test the model
+  saver = tf.train.Saver()
+  with tf.Session() as sess:
+      sess.run(tf.global_variables_initializer())
+      ckpt = tf.train.get_checkpoint_state("./checkpoints")
+      if ckpt and ckpt.model_checkpoint_path:
+          saver.restore(sess, "./checkpoints/traffic_sign_classifier.ckpt")
+          test_accuracy = evaluate(X_test_normalized, y_test)
+          print("Test accuracy {:.3f}".format(test_accuracy))
+      else:
+          print("do not find a chickpoint!")
+  ```
+
+* 测试了从网上找的几张德国交通标志图片的准确度
+
+  ![6](/Users/xiaoqiangxie/Desktop/imgs/6.jpg)
+
+  >数据预处理
+
+  ![7](/Users/xiaoqiangxie/Desktop/imgs/7.jpg)
+
+  > 最终预测结果为60%
+
+  ```python
+  import os
+  import matplotlib.image as mpimg
+  import cv2
+
+  filenames = os.listdir("test")
+  fig, axes = plt.subplots(1, 5, figsize=(20, 3))
+  ax_array = axes.ravel()
+  X_predict = []
+  for ax,filename in zip(ax_array, filenames):
+      if filename.endswith(".jpg"):
+          img = mpimg.imread("test/"+filename)
+          img = cv2.resize(img, (32, 32), cv2.INTER_LINEAR)
+          X_predict.append(img)
+          ax.imshow(img)
+          ax.axis("off")
+  plt.show()
+
+  # normalize images
+  X_predict_normalized = preprocess_features(X_predict)
+  fig, axes = plt.subplots(1, 5, figsize=(20, 3))
+  ax_array = axes.ravel()
+  for ax,img in zip(ax_array, X_predict_normalized):
+      ax.imshow(np.squeeze(img), cmap="gray")
+  plt.show()
+  ```
+
+* top k
+
+  ```python
+  ### Print out the top five softmax probabilities for the predictions on the German traffic sign images found on the web. 
+  ### Feel free to use as many code cells as needed.
+  saver = tf.train.Saver()
+  y_predict = []
+  with tf.Session() as sess:
+      sess.run(tf.global_variables_initializer())
+      ckpt = tf.train.get_checkpoint_state("./checkpoints")
+      if ckpt and ckpt.model_checkpoint_path:
+          saver.restore(sess, "./checkpoints/traffic_sign_classifier.ckpt")
+          top_k = sess.run(tf.nn.top_k(logits, k=5), feed_dict={x:X_predict_normalized, keep_prob:1.0})
+          for y_label, indices, values in zip(y_label_name,top_k.indices,top_k.values):
+              print("'{}' predicted as:".format(y_label))
+              for indice, value in zip(indices, values):
+                  print("{:<25}:{}".format(id_to_name.get(indice), value) )
+              print()
+              print()
+              
+      else:
+          print("do not find a chickpoint!")
+  ```
+
+  ![8](/Users/xiaoqiangxie/Desktop/imgs/8.jpg)
+
+  ​
+
 
 ### (Optional) Visualizing the Neural Network (See Step 4 of the Ipython notebook for more details)
 #### 1. Discuss the visual output of your trained network's feature maps. What characteristics did the neural network use to make classifications?
