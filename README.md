@@ -30,7 +30,7 @@
   >
   > 增加数据有两种方式，一是采集数据（困难），二是使用图片处理生成（简单），我选择的后者。
 
-  ![1](/Users/xiaoqiangxie/Desktop/imgs/1.jpg)
+  ![1](imgs/1.jpg)
 
 * 查看显示数据
 
@@ -48,7 +48,7 @@
   plt.show()
   ```
 
-  ![2](/Users/xiaoqiangxie/Desktop/imgs/2.jpg)
+  ![2](imgs/2.jpg)
 
   > 使用直方图，查看图像的各个类别的分布情况
 
@@ -66,7 +66,7 @@
   hist = plot_y_train_hist()
   ```
 
-  ![3](/Users/xiaoqiangxie/Desktop/imgs/3.jpg)
+  ![3](imgs/3.jpg)
 
 * 由上图知道数据分配不均匀，所以需要数据重采样，使样本个数分配均匀
 
@@ -89,7 +89,7 @@
   plot_y_train_hist()
   ```
 
-  ![4](/Users/xiaoqiangxie/Desktop/imgs/4.jpg)
+  ![4](imgs/4.jpg)
 
 * 数据预处理
 
@@ -173,7 +173,7 @@
 
   > 从生成的结果可以看出，生成的效果还是很不错 ，对原图像惊醒了一下放大、缩小、旋转，但是整个图像的形状进行了保留。
 
-![5](/Users/xiaoqiangxie/Desktop/imgs/5.jpg)
+![5](imgs/5.jpg)
 
 * 构建神经网络架构，训练，验证，保存模型参数
 
@@ -326,11 +326,11 @@
 
 * 测试了从网上找的几张德国交通标志图片的准确度
 
-  ![6](/Users/xiaoqiangxie/Desktop/imgs/6.jpg)
+  ![6](imgs/6.jpg)
 
   >数据预处理
 
-  ![7](/Users/xiaoqiangxie/Desktop/imgs/7.jpg)
+  ![7](imgs/7.jpg)
 
   > 最终预测结果为60%
 
@@ -385,7 +385,7 @@
           print("do not find a chickpoint!")
   ```
 
-  ![8](/Users/xiaoqiangxie/Desktop/imgs/8.jpg)
+  ![8](imgs/8.jpg)
 
   ​
 
